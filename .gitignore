@@ -1,0 +1,27 @@
+# 构建产物
+/bin/
+/dist/
+/web/dist/
+*.test
+
+# 日志和测试覆盖率
+*.log
+/logs/
+coverage.out
+coverage.txt
+coverage.html
+/coverage/
+
+# 本地环境配置，保留示例文件
+.env
+.env.*
+!.env.example
+*.local.yaml
+*.local.yml
+
+# 前端依赖
+node_modules/
+
+# 系统文件
+.DS_Store
+Thumbs.db
