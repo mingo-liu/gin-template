@@ -1,17 +1,22 @@
 package routes
 
 import (
+	"context"
 	"gin-template/internal/handler"
 	"gin-template/internal/middleware"
 	"gin-template/web"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"time"
 )
 
 func New(h *handler.Handler) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.SameOrigin())
 	r.Use(func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("Cache-Control", "no-store")
