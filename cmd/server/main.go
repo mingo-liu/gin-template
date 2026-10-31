@@ -18,8 +18,8 @@ import (
 	"likeflow/internal/handler"
 	"likeflow/internal/middleware"
 	"likeflow/internal/queue"
-	mysqlrepo "likeflow/internal/repository/mysql"
-	redisrepo "likeflow/internal/repository/redis"
+	"likeflow/internal/repository/mysql"
+	"likeflow/internal/repository/redis"
 	"likeflow/internal/routes"
 	"likeflow/internal/service"
 	"likeflow/internal/worker"
@@ -58,17 +58,17 @@ func run() error {
 	}
 	client := rdb.NewClient(&rdb.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword, MaxRetries: -1, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second})
 	defer client.Close()
-	redis := &redisrepo.Repository{Client: client, MaxBacklog: cfg.MaxBacklog}
-	mysql := &mysqlrepo.Repository{DB: db}
-	identity, err := redis.Identity(startup)
+	cache := &redis.Store{Client: client, MaxBacklog: cfg.MaxBacklog}
+	store := &mysql.Store{DB: db}
+	identity, err := cache.Identity(startup)
 	if err != nil {
 		return err
 	}
-	targets, err := mysql.Targets(startup)
+	targets, err := store.Targets(startup)
 	if err != nil {
 		return err
 	}
-	w := &worker.Worker{Redis: redis, DB: mysql, ReplayAfter: cfg.ReplayAfter}
+	w := &worker.Worker{Redis: cache, DB: store, ReplayAfter: cfg.ReplayAfter}
 	if *recoverID != "" {
 		if !*verified {
 			return fmt.Errorf("recovery requires --verified-log after operator verifies no log rollback/loss and MQ in-flight/retry/dead-letter state")
@@ -82,7 +82,7 @@ func run() error {
 	}
 	for _, t := range targets {
 		if !t.Initialized {
-			relations, count, err := mysql.Snapshot(startup, t)
+			relations, count, err := store.Snapshot(startup, t)
 			if err != nil {
 				return err
 			}
@@ -99,7 +99,7 @@ func run() error {
 				return err
 			}
 			if n == 1 {
-				if err = redis.Initialize(startup, t, identity); err != nil {
+				if err = cache.Initialize(startup, t, identity); err != nil {
 					return err
 				}
 			}
@@ -118,7 +118,7 @@ func run() error {
 	defer workCancel()
 	done := make(chan struct{})
 	go func() { defer close(done); w.Run(workCtx) }()
-	h := &handler.Handler{Service: &service.Service{DB: mysql, Redis: redis}, Auth: middleware.Auth{Secret: cfg.SessionSecret}, Demo: cfg.Demo}
+	h := &handler.Handler{Service: &service.Service{DB: store, Redis: cache}, Auth: middleware.Auth{Secret: cfg.SessionSecret}, Demo: cfg.Demo}
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: routes.New(h), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	failures := make(chan error, 1)
 	go func() {

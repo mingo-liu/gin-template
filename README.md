@@ -20,9 +20,9 @@ gin-template/
 │   │   └── service.go               # 业务逻辑
 │   ├── repository/                  # 数据访问
 │   │   ├── mysql/
-│   │   │   └── mysql_repository.go  # MySQL 数据访问
+│   │   │   └── mysql.go             # MySQL 数据访问
 │   │   └── redis/
-│   │       └── redis_repository.go  # Redis 数据访问
+│   │       └── redis.go             # Redis 数据访问
 │   ├── model/
 │   │   └── model.go                 # 数据模型
 │   ├── middleware/

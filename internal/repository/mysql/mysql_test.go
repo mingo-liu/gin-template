@@ -25,7 +25,7 @@ func TestApplyIntegration(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(8)
-	r := &Repository{DB: db}
+	store := &Store{DB: db}
 	ctx := context.Background()
 	id := strconv.FormatInt(time.Now().UnixNano(), 10)
 	target := model.Target{Type: 1, ID: id}
@@ -41,40 +41,40 @@ func TestApplyIntegration(t *testing.T) {
 		return model.Event{SchemaVersion: 1, EventID: fmt.Sprintf("1:%s:g1:123-0", id), Generation: "g1", StreamID: "123-0", TargetType: 1, TargetID: id, UserID: user, Action: action, Version: version}
 	}
 	for _, e := range []model.Event{event("1001", "UNLIKE", "2"), event("1001", "LIKE", "1"), event("1001", "LIKE", "3")} {
-		if err = r.Apply(ctx, e); err != nil {
+		if err = store.Apply(ctx, e); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Go(func() {
-			if err := r.Apply(ctx, event("1001", "LIKE", "3")); err != nil {
+			if err := store.Apply(ctx, event("1001", "LIKE", "3")); err != nil {
 				t.Error(err)
 			}
 		})
 	}
 	wg.Wait()
-	relations, count, err := r.Snapshot(ctx, target)
+	relations, count, err := store.Snapshot(ctx, target)
 	if err != nil || count != 1 || len(relations) != 1 || relations[0].Version != 3 {
 		t.Fatalf("snapshot %+v %d %v", relations, count, err)
 	}
-	if err = r.Apply(ctx, event("1001", "UNLIKE", "3")); !errors.Is(err, model.ErrConflict) {
+	if err = store.Apply(ctx, event("1001", "UNLIKE", "3")); !errors.Is(err, model.ErrConflict) {
 		t.Fatalf("conflict: %v", err)
 	}
 	// Missing count must roll back both the inserted relation and its version.
 	db.Exec("DELETE FROM like_count WHERE target_type=1 AND target_id=?", id)
-	if err = r.Apply(ctx, event("1002", "LIKE", "1")); err == nil {
+	if err = store.Apply(ctx, event("1002", "LIKE", "1")); err == nil {
 		t.Fatal("accepted missing count")
 	}
-	relation, err := r.Relation(ctx, target, "1002")
+	relation, err := store.Relation(ctx, target, "1002")
 	if err != nil || relation.Version != 0 {
 		t.Fatalf("partial commit %+v %v", relation, err)
 	}
 	db.Exec("INSERT INTO like_count(target_type,target_id,like_count) VALUES(1,?,0)", id)
-	if err = r.Apply(ctx, event("1001", "UNLIKE", "4")); err == nil {
+	if err = store.Apply(ctx, event("1001", "UNLIKE", "4")); err == nil {
 		t.Fatal("accepted count underflow")
 	}
-	relation, err = r.Relation(ctx, target, "1001")
+	relation, err = store.Relation(ctx, target, "1001")
 	if err != nil || relation.Version != 3 || !relation.Liked {
 		t.Fatalf("failed rollback %+v %v", relation, err)
 	}

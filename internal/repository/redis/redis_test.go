@@ -14,7 +14,7 @@ import (
 	"likeflow/internal/model"
 )
 
-func testRepository(t *testing.T) (*Repository, model.Target) {
+func testStore(t *testing.T) (*Store, model.Target) {
 	t.Helper()
 	binary, err := exec.LookPath("redis-server")
 	if err != nil {
@@ -40,25 +40,25 @@ func testRepository(t *testing.T) (*Repository, model.Target) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	r := &Repository{Client: client, MaxBacklog: 1000}
-	id, err := r.Identity(context.Background())
+	store := &Store{Client: client, MaxBacklog: 1000}
+	id, err := store.Identity(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	target := model.Target{Type: 1, ID: "2001", RedisRunID: id}
-	if err = r.Initialize(context.Background(), target, id); err != nil {
+	if err = store.Initialize(context.Background(), target, id); err != nil {
 		t.Fatal(err)
 	}
-	return r, target
+	return store, target
 }
 
 func TestConcurrentIdempotency(t *testing.T) {
-	r, target := testRepository(t)
+	store, target := testStore(t)
 	ctx := context.Background()
 	var wg sync.WaitGroup
 	for range 50 {
 		wg.Go(func() {
-			s, err := r.State(ctx, target, "1001", "LIKE")
+			s, err := store.State(ctx, target, "1001", "LIKE")
 			if err != nil {
 				t.Error(err)
 				return
@@ -69,94 +69,94 @@ func TestConcurrentIdempotency(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if n := r.Client.XLen(ctx, Keys(target)[3]).Val(); n != 1 {
+	if n := store.Client.XLen(ctx, Keys(target)[3]).Val(); n != 1 {
 		t.Fatalf("events=%d", n)
 	}
-	s, err := r.State(ctx, target, "1001", "UNLIKE")
+	s, err := store.State(ctx, target, "1001", "UNLIKE")
 	if err != nil || s.Liked || s.Count != "0" || s.Version != "2" || !s.Changed {
 		t.Fatalf("unlike: %+v %v", s, err)
 	}
-	s, err = r.State(ctx, target, "1001", "UNLIKE")
+	s, err = store.State(ctx, target, "1001", "UNLIKE")
 	if err != nil || s.Changed || s.Version != "2" {
 		t.Fatalf("repeat unlike: %+v %v", s, err)
 	}
-	s, err = r.State(ctx, target, "1001", "LIKE")
+	s, err = store.State(ctx, target, "1001", "LIKE")
 	if err != nil || s.Version != "3" {
 		t.Fatalf("late LIKE: %+v %v", s, err)
 	}
-	if err = r.Initialize(ctx, target, target.RedisRunID); err == nil {
+	if err = store.Initialize(ctx, target, target.RedisRunID); err == nil {
 		t.Fatal("reinitialized live target")
 	}
 }
 
 func TestCorruptionAndBackpressure(t *testing.T) {
-	r, target := testRepository(t)
+	store, target := testStore(t)
 	ctx := context.Background()
 	k := Keys(target)
-	r.Client.Set(ctx, k[1], "01", 0)
-	if _, err := r.State(ctx, target, "1001", "LIKE"); err == nil {
+	store.Client.Set(ctx, k[1], "01", 0)
+	if _, err := store.State(ctx, target, "1001", "LIKE"); err == nil {
 		t.Fatal("accepted corrupt count")
 	}
-	if n := r.Client.XLen(ctx, k[3]).Val(); n != 0 {
+	if n := store.Client.XLen(ctx, k[3]).Val(); n != 0 {
 		t.Fatal("wrote event before validation")
 	}
-	r.Client.Set(ctx, k[1], "0", 0)
-	r.MaxBacklog = 1
-	if _, err := r.State(ctx, target, "1001", "LIKE"); err != nil {
+	store.Client.Set(ctx, k[1], "0", 0)
+	store.MaxBacklog = 1
+	if _, err := store.State(ctx, target, "1001", "LIKE"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.State(ctx, target, "1002", "LIKE"); err == nil {
+	if _, err := store.State(ctx, target, "1002", "LIKE"); err == nil {
 		t.Fatal("missing backpressure")
 	}
-	r.Client.Del(ctx, k[1])
-	if _, err := r.State(ctx, target, "1001", "QUERY"); err == nil {
+	store.Client.Del(ctx, k[1])
+	if _, err := store.State(ctx, target, "1001", "QUERY"); err == nil {
 		t.Fatal("missing count served")
 	}
 }
 
 func TestPartialWriteLeavesRecoveryFence(t *testing.T) {
-	r, target := testRepository(t)
+	store, target := testStore(t)
 	ctx := context.Background()
 	k := Keys(target)
 	// Deny SET only: XADD and SADD succeed, then the script fails before the version write.
-	err := r.Client.Do(ctx, "ACL", "SETUSER", "partial", "on", ">test-secret", "~*", "+@all", "-set").Err()
+	err := store.Client.Do(ctx, "ACL", "SETUSER", "partial", "on", ">test-secret", "~*", "+@all", "-set").Err()
 	if err != nil {
 		t.Fatal(err)
 	}
-	restricted := rdb.NewClient(&rdb.Options{Addr: r.Client.Options().Addr, Username: "partial", Password: "test-secret"})
+	restricted := rdb.NewClient(&rdb.Options{Addr: store.Client.Options().Addr, Username: "partial", Password: "test-secret"})
 	defer restricted.Close()
-	broken := &Repository{Client: restricted, MaxBacklog: 100}
+	broken := &Store{Client: restricted, MaxBacklog: 100}
 	if _, err = broken.State(ctx, target, "1001", "LIKE"); err == nil {
 		t.Fatal("expected injected SET failure")
 	}
-	if state := r.Client.HGet(ctx, k[4], "state").Val(); state != "RECOVERING" {
+	if state := store.Client.HGet(ctx, k[4], "state").Val(); state != "RECOVERING" {
 		t.Fatalf("fence=%s", state)
 	}
-	if n := r.Client.XLen(ctx, k[3]).Val(); n != 1 {
+	if n := store.Client.XLen(ctx, k[3]).Val(); n != 1 {
 		t.Fatalf("lost recovery event, length=%d", n)
 	}
-	if _, err = r.State(ctx, target, "1002", "LIKE"); err == nil {
+	if _, err = store.State(ctx, target, "1002", "LIKE"); err == nil {
 		t.Fatal("served partially written state")
 	}
 }
 
 func TestVersionLimitAndServerFence(t *testing.T) {
-	r, target := testRepository(t)
+	store, target := testStore(t)
 	ctx := context.Background()
 	k := Keys(target)
-	r.Client.HSet(ctx, k[2], "1001", strconv.FormatUint(model.MaxNumber, 10))
-	if _, err := r.State(ctx, target, "1001", "LIKE"); err == nil {
+	store.Client.HSet(ctx, k[2], "1001", strconv.FormatUint(model.MaxNumber, 10))
+	if _, err := store.State(ctx, target, "1001", "LIKE"); err == nil {
 		t.Fatal("accepted version overflow")
 	}
-	if r.Client.XLen(ctx, k[3]).Val() != 0 {
+	if store.Client.XLen(ctx, k[3]).Val() != 0 {
 		t.Fatal("overflow emitted event")
 	}
-	s, err := r.State(ctx, target, "18446744073709551615", "LIKE")
+	s, err := store.State(ctx, target, "18446744073709551615", "LIKE")
 	if err != nil || !s.Liked {
 		t.Fatalf("large user ID: %+v %v", s, err)
 	}
-	r.Client.HSet(ctx, k[4], "run_id", "old-server")
-	if err = stateScript.Run(ctx, r.Client, k, "1002", 1, target.ID, "LIKE", "old-server", 1000).Err(); err == nil {
+	store.Client.HSet(ctx, k[4], "run_id", "old-server")
+	if err = stateScript.Run(ctx, store.Client, k, "1002", 1, target.ID, "LIKE", "old-server", 1000).Err(); err == nil {
 		t.Fatal("atomic script accepted stale server identity")
 	}
 }

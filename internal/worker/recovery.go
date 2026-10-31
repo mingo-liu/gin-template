@@ -8,14 +8,14 @@ import (
 
 	rdb "github.com/redis/go-redis/v9"
 	"likeflow/internal/model"
-	redisrepo "likeflow/internal/repository/redis"
+	"likeflow/internal/repository/redis"
 )
 
 // Recover fences writers and cleanup, drains surviving log watermarks, then publishes a snapshot.
 // resume replaces the previous non-expiring token, preventing an interrupted task from publishing.
 func (w *Worker) Recover(ctx context.Context, t model.Target, resume string) error {
-	k := redisrepo.Keys(t)
-	token := redisrepo.Token()
+	k := redis.Keys(t)
+	token := redis.Token()
 	acquire := rdb.NewScript(`
  if redis.call('TYPE',KEYS[4]).ok~='stream' then return redis.error_reply('missing log: verify MQ and restore log before recovery') end
  local old=redis.call('HGET',KEYS[5],'recovery_token') or ''
@@ -33,7 +33,7 @@ func (w *Worker) Recover(ctx context.Context, t model.Target, resume string) err
 			return err
 		}
 		for _, m := range entries {
-			e, err := redisrepo.Event(t, m)
+			e, err := redis.Event(t, m)
 			if err != nil {
 				return err
 			}
@@ -116,7 +116,7 @@ func (w *Worker) Recover(ctx context.Context, t model.Target, resume string) err
  redis.call('RENAME',KEYS[7],KEYS[2])
  redis.call('HSET',KEYS[5],'generation',ARGV[4],'run_id',ARGV[5],'state','READY')
  redis.call('HDEL',KEYS[5],'recovery_token','error');return 1`)
-	if err = publish.Run(ctx, w.Redis.Client, append(k, temp...), token, strconv.FormatUint(count, 10), strconv.Itoa(len(relations)), redisrepo.Token(), id).Err(); err != nil {
+	if err = publish.Run(ctx, w.Redis.Client, append(k, temp...), token, strconv.FormatUint(count, 10), strconv.Itoa(len(relations)), redis.Token(), id).Err(); err != nil {
 		return err
 	}
 	// Publication precedes catalog identity update, so any failure remains unavailable at the API.

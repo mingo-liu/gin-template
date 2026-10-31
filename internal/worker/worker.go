@@ -11,16 +11,16 @@ import (
 
 	rdb "github.com/redis/go-redis/v9"
 	"likeflow/internal/model"
-	mysqlrepo "likeflow/internal/repository/mysql"
-	redisrepo "likeflow/internal/repository/redis"
+	"likeflow/internal/repository/mysql"
+	"likeflow/internal/repository/redis"
 )
 
 type Sender interface {
 	Send(context.Context, model.Event) error
 }
 type Worker struct {
-	Redis       *redisrepo.Repository
-	DB          *mysqlrepo.Repository
+	Redis       *redis.Store
+	DB          *mysql.Store
 	MQ          Sender
 	ReplayAfter time.Duration
 	Consumer    string
@@ -33,7 +33,7 @@ func (w *Worker) Apply(ctx context.Context, e model.Event) error {
 	}
 	t := model.Target{Type: e.TargetType, ID: e.TargetID}
 	// A quarantined conflict is retried until an operator resolves the inconsistent versions.
-	reason, err := w.Redis.Client.HGet(ctx, redisrepo.Keys(t)[4], "error").Result()
+	reason, err := w.Redis.Client.HGet(ctx, redis.Keys(t)[4], "error").Result()
 	if err != nil && err != rdb.Nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (w *Worker) Apply(ctx context.Context, e model.Event) error {
 
 // Run forwards pending/new entries and independently reconciles retained logs with MySQL.
 func (w *Worker) Run(ctx context.Context) {
-	w.Consumer = redisrepo.Token()
+	w.Consumer = redis.Token()
 	w.cursors = map[string]string{}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -90,7 +90,7 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) send(ctx context.Context, t model.Target, m rdb.XMessage) error {
-	e, err := redisrepo.Event(t, m)
+	e, err := redis.Event(t, m)
 	if err != nil {
 		w.Redis.Quarantine(ctx, t, err.Error())
 		return err
@@ -100,11 +100,11 @@ func (w *Worker) send(ctx context.Context, t model.Target, m rdb.XMessage) error
 	if err = w.MQ.Send(sendCtx, e); err != nil {
 		return err
 	}
-	return w.Redis.Client.XAck(ctx, redisrepo.Keys(t)[3], redisrepo.Group, m.ID).Err()
+	return w.Redis.Client.XAck(ctx, redis.Keys(t)[3], redis.Group, m.ID).Err()
 }
 
 func (w *Worker) process(ctx context.Context, t model.Target) error {
-	k := redisrepo.Keys(t)
+	k := redis.Keys(t)
 	identity, err := w.Redis.Identity(ctx)
 	if err != nil {
 		return err
@@ -129,11 +129,11 @@ func (w *Worker) process(ctx context.Context, t model.Target) error {
 	if typ != "stream" {
 		return model.ErrUnavailable
 	}
-	err = w.Redis.Client.XGroupCreateMkStream(ctx, k[3], redisrepo.Group, "0").Err()
+	err = w.Redis.Client.XGroupCreateMkStream(ctx, k[3], redis.Group, "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
-	messages, _, err := w.Redis.Client.XAutoClaim(ctx, &rdb.XAutoClaimArgs{Stream: k[3], Group: redisrepo.Group, Consumer: w.Consumer, MinIdle: 30 * time.Second, Start: "0-0", Count: 32}).Result()
+	messages, _, err := w.Redis.Client.XAutoClaim(ctx, &rdb.XAutoClaimArgs{Stream: k[3], Group: redis.Group, Consumer: w.Consumer, MinIdle: 30 * time.Second, Start: "0-0", Count: 32}).Result()
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (w *Worker) process(ctx context.Context, t model.Target) error {
 			return err
 		}
 	}
-	streams, err := w.Redis.Client.XReadGroup(ctx, &rdb.XReadGroupArgs{Group: redisrepo.Group, Consumer: w.Consumer, Streams: []string{k[3], ">"}, Count: 32, Block: -1}).Result()
+	streams, err := w.Redis.Client.XReadGroup(ctx, &rdb.XReadGroupArgs{Group: redis.Group, Consumer: w.Consumer, Streams: []string{k[3], ">"}, Count: 32, Block: -1}).Result()
 	if err != nil && err != rdb.Nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (w *Worker) process(ctx context.Context, t model.Target) error {
 			}
 		}
 	}
-	pending, err := w.Redis.Client.XPending(ctx, k[3], redisrepo.Group).Result()
+	pending, err := w.Redis.Client.XPending(ctx, k[3], redis.Group).Result()
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (w *Worker) process(ctx context.Context, t model.Target) error {
 		return err
 	}
 	for _, m := range entries {
-		e, err := redisrepo.Event(t, m)
+		e, err := redis.Event(t, m)
 		if err != nil {
 			w.Redis.Quarantine(ctx, t, err.Error())
 			return err
@@ -207,7 +207,7 @@ func (w *Worker) process(ctx context.Context, t model.Target) error {
 func (w *Worker) scan(ctx context.Context, targets []model.Target) {
 	known := map[string]bool{}
 	for _, t := range targets {
-		known[redisrepo.Keys(t)[3]] = true
+		known[redis.Keys(t)[3]] = true
 	}
 	var cursor uint64
 	for {

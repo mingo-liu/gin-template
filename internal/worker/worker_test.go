@@ -11,8 +11,8 @@ import (
 
 	rdb "github.com/redis/go-redis/v9"
 	"likeflow/internal/model"
-	mysqlrepo "likeflow/internal/repository/mysql"
-	redisrepo "likeflow/internal/repository/redis"
+	"likeflow/internal/repository/mysql"
+	"likeflow/internal/repository/redis"
 )
 
 type testSender struct {
@@ -41,9 +41,9 @@ func TestRelayRetentionAndRecoveryIntegration(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	client := rdb.NewClient(&rdb.Options{Addr: addr})
 	t.Cleanup(func() { client.Close() })
-	redis := &redisrepo.Repository{Client: client, MaxBacklog: 100}
-	mysql := &mysqlrepo.Repository{DB: db}
-	identity, err := redis.Identity(ctx)
+	cache := &redis.Store{Client: client, MaxBacklog: 100}
+	store := &mysql.Store{DB: db}
+	identity, err := cache.Identity(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,24 +54,24 @@ func TestRelayRetentionAndRecoveryIntegration(t *testing.T) {
 	}
 	db.Exec("INSERT INTO like_count(target_type,target_id) VALUES(1,?)", target.ID)
 	t.Cleanup(func() {
-		client.Del(ctx, redisrepo.Keys(target)...)
+		client.Del(ctx, redis.Keys(target)...)
 		db.Exec("DELETE FROM user_like WHERE target_id=?", target.ID)
 		db.Exec("DELETE FROM like_count WHERE target_id=?", target.ID)
 		db.Exec("DELETE FROM targets WHERE target_id=?", target.ID)
 	})
-	if err = redis.Initialize(ctx, target, identity); err != nil {
+	if err = cache.Initialize(ctx, target, identity); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = redis.State(ctx, target, "1001", "LIKE"); err != nil {
+	if _, err = cache.State(ctx, target, "1001", "LIKE"); err != nil {
 		t.Fatal(err)
 	}
 	sender := &testSender{fail: true}
-	w := &Worker{Redis: redis, DB: mysql, MQ: sender, Consumer: "test", ReplayAfter: -time.Second, cursors: map[string]string{}}
+	w := &Worker{Redis: cache, DB: store, MQ: sender, Consumer: "test", ReplayAfter: -time.Second, cursors: map[string]string{}}
 	if err = w.process(ctx, target); err == nil {
 		t.Fatal("expected MQ failure")
 	}
-	key := redisrepo.Keys(target)[3]
-	if pending := client.XPending(ctx, key, redisrepo.Group).Val(); pending.Count != 1 {
+	key := redis.Keys(target)[3]
+	if pending := client.XPending(ctx, key, redis.Group).Val(); pending.Count != 1 {
 		t.Fatalf("pending=%+v", pending)
 	}
 	sender.fail = false
@@ -94,10 +94,10 @@ func TestRelayRetentionAndRecoveryIntegration(t *testing.T) {
 		t.Fatal("committed log not cleaned")
 	}
 	// A partial write can leave the stream ahead of the versions hash.
-	if _, err = redis.State(ctx, target, "1001", "UNLIKE"); err != nil {
+	if _, err = cache.State(ctx, target, "1001", "UNLIKE"); err != nil {
 		t.Fatal(err)
 	}
-	k := redisrepo.Keys(target)
+	k := redis.Keys(target)
 	client.HSet(ctx, k[2], "1001", "1")
 	client.SAdd(ctx, k[0], "1001")
 	client.Set(ctx, k[1], "1", 0)
@@ -108,7 +108,7 @@ func TestRelayRetentionAndRecoveryIntegration(t *testing.T) {
 	if err = w.Recover(ctx, target, "old-task"); err != nil {
 		t.Fatal(err)
 	}
-	state, err := redis.State(ctx, target, "1001", "QUERY")
+	state, err := cache.State(ctx, target, "1001", "QUERY")
 	if err != nil || state.Liked || state.Count != "0" || state.Version != "2" {
 		t.Fatalf("recovery: %+v %v", state, err)
 	}
@@ -117,7 +117,7 @@ func TestRelayRetentionAndRecoveryIntegration(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatal("recovery destroyed retained log")
 	}
-	if err = redis.DeleteCommitted(ctx, target, entries[0].ID); err != nil {
+	if err = cache.DeleteCommitted(ctx, target, entries[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	if client.XLen(ctx, key).Val() != 1 {

@@ -10,10 +10,11 @@ import (
 	"likeflow/internal/model"
 )
 
-type Repository struct{ DB *sql.DB }
+// Store persists like relations and counts in MySQL.
+type Store struct{ DB *sql.DB }
 
-func (r *Repository) Targets(ctx context.Context) ([]model.Target, error) {
-	rows, err := r.DB.QueryContext(ctx, "SELECT target_type,target_id,title,summary,category,initialized,redis_run_id FROM targets ORDER BY target_type,target_id")
+func (s *Store) Targets(ctx context.Context) ([]model.Target, error) {
+	rows, err := s.DB.QueryContext(ctx, "SELECT target_type,target_id,title,summary,category,initialized,redis_run_id FROM targets ORDER BY target_type,target_id")
 	if err != nil {
 		return nil, err
 	}
@@ -29,9 +30,9 @@ func (r *Repository) Targets(ctx context.Context) ([]model.Target, error) {
 	return result, rows.Err()
 }
 
-func (r *Repository) Relation(ctx context.Context, t model.Target, user string) (model.Relation, error) {
+func (s *Store) Relation(ctx context.Context, t model.Target, user string) (model.Relation, error) {
 	v := model.Relation{UserID: user}
-	err := r.DB.QueryRowContext(ctx, "SELECT liked,version FROM user_like WHERE user_id=? AND target_type=? AND target_id=?", user, t.Type, t.ID).Scan(&v.Liked, &v.Version)
+	err := s.DB.QueryRowContext(ctx, "SELECT liked,version FROM user_like WHERE user_id=? AND target_type=? AND target_id=?", user, t.Type, t.ID).Scan(&v.Liked, &v.Version)
 	if err == sql.ErrNoRows {
 		err = nil
 	}
@@ -39,11 +40,11 @@ func (r *Repository) Relation(ctx context.Context, t model.Target, user string) 
 }
 
 // Apply atomically persists the newest relation and derives count changes from stored state.
-func (r *Repository) Apply(ctx context.Context, e model.Event) (err error) {
+func (s *Store) Apply(ctx context.Context, e model.Event) (err error) {
 	if err = e.Validate(); err != nil {
 		return err
 	}
-	tx, err := r.DB.BeginTx(ctx, nil)
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -106,8 +107,8 @@ func (r *Repository) Apply(ctx context.Context, e model.Event) (err error) {
 }
 
 // Snapshot reads relationships and the aggregate from a single consistent MySQL snapshot.
-func (r *Repository) Snapshot(ctx context.Context, t model.Target) ([]model.Relation, uint64, error) {
-	tx, err := r.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+func (s *Store) Snapshot(ctx context.Context, t model.Target) ([]model.Relation, uint64, error) {
+	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, 0, err
 	}

@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"likeflow/internal/model"
-	mysqlrepo "likeflow/internal/repository/mysql"
-	redisrepo "likeflow/internal/repository/redis"
+	"likeflow/internal/repository/mysql"
+	"likeflow/internal/repository/redis"
 )
 
 type Service struct {
-	DB    *mysqlrepo.Repository
-	Redis *redisrepo.Repository
+	DB    *mysql.Store
+	Redis *redis.Store
 }
 
 func (s *Service) Target(ctx context.Context, typ int, id string) (model.Target, error) {

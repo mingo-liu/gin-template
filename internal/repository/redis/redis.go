@@ -19,7 +19,8 @@ var stateScript = rdb.NewScript(stateLua)
 
 const Group = "like-relay"
 
-type Repository struct {
+// Store maintains online like state and its event log in Redis.
+type Store struct {
 	Client     *rdb.Client
 	MaxBacklog int64
 }
@@ -38,8 +39,8 @@ func Token() string {
 }
 
 // Identity rejects replicas and detects restarts against the durable target catalog.
-func (r *Repository) Identity(ctx context.Context) (string, error) {
-	info, err := r.Client.Info(ctx, "server", "replication", "persistence", "memory").Result()
+func (s *Store) Identity(ctx context.Context) (string, error) {
+	info, err := s.Client.Info(ctx, "server", "replication", "persistence", "memory").Result()
 	if err != nil {
 		return "", err
 	}
@@ -59,15 +60,15 @@ func (r *Repository) Identity(ctx context.Context) (string, error) {
 	return fields["run_id"], nil
 }
 
-func (r *Repository) State(ctx context.Context, t model.Target, user, action string) (model.State, error) {
-	id, err := r.Identity(ctx)
+func (s *Store) State(ctx context.Context, t model.Target, user, action string) (model.State, error) {
+	id, err := s.Identity(ctx)
 	if err != nil {
 		return model.State{}, err
 	}
 	if id != t.RedisRunID {
 		return model.State{}, model.ErrUnavailable
 	}
-	values, err := stateScript.Run(ctx, r.Client, Keys(t), user, t.Type, t.ID, action, id, r.MaxBacklog).Slice()
+	values, err := stateScript.Run(ctx, s.Client, Keys(t), user, t.Type, t.ID, action, id, s.MaxBacklog).Slice()
 	if err != nil {
 		return model.State{}, err
 	}
@@ -75,7 +76,7 @@ func (r *Repository) State(ctx context.Context, t model.Target, user, action str
 }
 
 // Initialize only accepts completely absent keys. Existing READY state is never reset.
-func (r *Repository) Initialize(ctx context.Context, t model.Target, id string) error {
+func (s *Store) Initialize(ctx context.Context, t model.Target, id string) error {
 	script := rdb.NewScript(`
  for i=1,5 do if redis.call('EXISTS',KEYS[i])~=0 then return redis.error_reply('existing keys require recovery') end end
  redis.call('HSET',KEYS[5],'state','RECOVERING','generation',ARGV[1],'run_id',ARGV[2])
@@ -83,11 +84,11 @@ func (r *Repository) Initialize(ctx context.Context, t model.Target, id string) 
  redis.call('XGROUP','CREATE',KEYS[4],ARGV[3],'0','MKSTREAM')
  redis.call('HSET',KEYS[5],'state','READY')
  return 1`)
-	return script.Run(ctx, r.Client, Keys(t), Token(), id, Group).Err()
+	return script.Run(ctx, s.Client, Keys(t), Token(), id, Group).Err()
 }
 
-func (r *Repository) Quarantine(ctx context.Context, t model.Target, reason string) error {
-	return r.Client.HSet(ctx, Keys(t)[4], "state", "RECOVERING", "error", reason).Err()
+func (s *Store) Quarantine(ctx context.Context, t model.Target, reason string) error {
+	return s.Client.HSet(ctx, Keys(t)[4], "state", "RECOVERING", "error", reason).Err()
 }
 
 func Event(t model.Target, m rdb.XMessage) (model.Event, error) {
@@ -105,9 +106,9 @@ func Event(t model.Target, m rdb.XMessage) (model.Event, error) {
 }
 
 // DeleteCommitted is fenced against recovery and leaves uncommitted entries untouched.
-func (r *Repository) DeleteCommitted(ctx context.Context, t model.Target, id string) error {
+func (s *Store) DeleteCommitted(ctx context.Context, t model.Target, id string) error {
 	script := rdb.NewScript(`if redis.call('HGET',KEYS[2],'state')~='READY' or redis.call('HEXISTS',KEYS[2],'recovery_token')==1 then return 0 end
  redis.call('XACK',KEYS[1],ARGV[1],ARGV[2]);return redis.call('XDEL',KEYS[1],ARGV[2])`)
 	k := Keys(t)
-	return script.Run(ctx, r.Client, []string{k[3], k[4]}, Group, id).Err()
+	return script.Run(ctx, s.Client, []string{k[3], k[4]}, Group, id).Err()
 }
