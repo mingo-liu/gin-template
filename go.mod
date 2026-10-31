@@ -1,4 +1,4 @@
-module gin-template
+module likeflow
 
 go 1.26.0
 

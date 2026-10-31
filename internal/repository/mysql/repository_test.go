@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"gin-template/internal/model"
+	"likeflow/internal/model"
 )
 
 func TestApplyIntegration(t *testing.T) {

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"gin-template/internal/model"
 	"github.com/gin-gonic/gin"
+	"likeflow/internal/model"
 )
 
 type Auth struct{ Secret string }

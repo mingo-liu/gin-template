@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"gin-template/internal/model"
-	mysqlrepo "gin-template/internal/repository/mysql"
-	redisrepo "gin-template/internal/repository/redis"
+	"likeflow/internal/model"
+	mysqlrepo "likeflow/internal/repository/mysql"
+	redisrepo "likeflow/internal/repository/redis"
 )
 
 type Service struct {

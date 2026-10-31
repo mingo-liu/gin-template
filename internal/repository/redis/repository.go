@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gin-template/internal/model"
 	rdb "github.com/redis/go-redis/v9"
+	"likeflow/internal/model"
 )
 
 //go:embed state.lua

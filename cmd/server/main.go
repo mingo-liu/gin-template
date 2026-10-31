@@ -13,16 +13,16 @@ import (
 	"syscall"
 	"time"
 
-	"gin-template/internal/config"
-	"gin-template/internal/handler"
-	"gin-template/internal/middleware"
-	"gin-template/internal/queue"
-	mysqlrepo "gin-template/internal/repository/mysql"
-	redisrepo "gin-template/internal/repository/redis"
-	"gin-template/internal/routes"
-	"gin-template/internal/service"
-	"gin-template/internal/worker"
 	rdb "github.com/redis/go-redis/v9"
+	"likeflow/internal/config"
+	"likeflow/internal/handler"
+	"likeflow/internal/middleware"
+	"likeflow/internal/queue"
+	mysqlrepo "likeflow/internal/repository/mysql"
+	redisrepo "likeflow/internal/repository/redis"
+	"likeflow/internal/routes"
+	"likeflow/internal/service"
+	"likeflow/internal/worker"
 )
 
 func main() {

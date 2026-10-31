@@ -2,10 +2,10 @@ package routes
 
 import (
 	"context"
-	"gin-template/internal/handler"
-	"gin-template/internal/middleware"
-	"gin-template/web"
 	"github.com/gin-gonic/gin"
+	"likeflow/internal/handler"
+	"likeflow/internal/middleware"
+	"likeflow/web"
 	"net/http"
 	"time"
 )

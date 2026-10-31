@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"gin-template/internal/middleware"
-	"gin-template/internal/model"
-	"gin-template/internal/service"
 	"github.com/gin-gonic/gin"
+	"likeflow/internal/middleware"
+	"likeflow/internal/model"
+	"likeflow/internal/service"
 )
 
 type Handler struct {

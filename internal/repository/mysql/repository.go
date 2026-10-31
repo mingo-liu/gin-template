@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"gin-template/internal/model"
 	_ "github.com/go-sql-driver/mysql"
+	"likeflow/internal/model"
 )
 
 type Repository struct{ DB *sql.DB }

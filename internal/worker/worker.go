@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"gin-template/internal/model"
-	mysqlrepo "gin-template/internal/repository/mysql"
-	redisrepo "gin-template/internal/repository/redis"
 	rdb "github.com/redis/go-redis/v9"
+	"likeflow/internal/model"
+	mysqlrepo "likeflow/internal/repository/mysql"
+	redisrepo "likeflow/internal/repository/redis"
 )
 
 type Sender interface {

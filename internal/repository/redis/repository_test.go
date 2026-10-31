@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"gin-template/internal/model"
 	rdb "github.com/redis/go-redis/v9"
+	"likeflow/internal/model"
 )
 
 func testRepository(t *testing.T) (*Repository, model.Target) {

@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"strconv"
 
-	"gin-template/internal/model"
-	redisrepo "gin-template/internal/repository/redis"
 	rdb "github.com/redis/go-redis/v9"
+	"likeflow/internal/model"
+	redisrepo "likeflow/internal/repository/redis"
 )
 
 // Recover fences writers and cleanup, drains surviving log watermarks, then publishes a snapshot.
