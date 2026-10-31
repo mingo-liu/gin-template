@@ -25,6 +25,7 @@ func (a Auth) Token(user string) string {
 	mac.Write([]byte(payload))
 	return payload + "." + hex.EncodeToString(mac.Sum(nil))
 }
+
 func (a Auth) Require() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, _ := c.Cookie("likeflow_session")
@@ -60,6 +61,7 @@ func (a Auth) Require() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
 func unauthorized(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "请先选择测试用户登录", "code": "UNAUTHORIZED"})
 }

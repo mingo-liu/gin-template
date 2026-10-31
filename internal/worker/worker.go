@@ -9,18 +9,19 @@ import (
 	"strings"
 	"time"
 
-	rdb "github.com/redis/go-redis/v9"
 	"likeflow/internal/model"
 	"likeflow/internal/repository/mysql"
 	"likeflow/internal/repository/redis"
+
+	rdb "github.com/redis/go-redis/v9"
 )
 
 type Sender interface {
 	Send(context.Context, model.Event) error
 }
 type Worker struct {
-	Redis       *redis.Store
-	DB          *mysql.Store
+	Redis       *redis.Redis
+	DB          *mysql.MySQL
 	MQ          Sender
 	ReplayAfter time.Duration
 	Consumer    string

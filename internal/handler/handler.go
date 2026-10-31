@@ -34,6 +34,7 @@ func (h *Handler) Session(c *gin.Context) {
 	c.SetCookie("likeflow_session", h.Auth.Token(input.UserID), 43200, "/", "", c.Request.TLS != nil, true)
 	c.JSON(200, gin.H{"user_id": input.UserID})
 }
+
 func (h *Handler) Articles(c *gin.Context) {
 	targets, err := h.Service.DB.Targets(c.Request.Context())
 	if err != nil {
@@ -42,7 +43,9 @@ func (h *Handler) Articles(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"targets": targets, "demo_mode": h.Demo})
 }
+
 func (h *Handler) State(c *gin.Context) { h.state(c, "QUERY") }
+
 func (h *Handler) Change(c *gin.Context) {
 	var body struct {
 		Action string `json:"action"`
@@ -53,6 +56,7 @@ func (h *Handler) Change(c *gin.Context) {
 	}
 	h.state(c, body.Action)
 }
+
 func (h *Handler) state(c *gin.Context, action string) {
 	typ, id, ok := parse(c)
 	if !ok {
@@ -65,6 +69,7 @@ func (h *Handler) state(c *gin.Context, action string) {
 	}
 	c.JSON(200, state)
 }
+
 func parse(c *gin.Context) (int, string, bool) {
 	typ, err := strconv.Atoi(c.Param("type"))
 	id := c.Param("id")
@@ -100,6 +105,7 @@ func (h *Handler) Sync(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"liked": v.Liked, "count": count, "version": strconv.FormatUint(v.Version, 10)})
 }
+
 func (h *Handler) fail(c *gin.Context, err error) {
 	if errors.Is(err, model.ErrNotFound) {
 		c.JSON(404, gin.H{"error": "对象不存在或不可访问", "code": "NOT_FOUND"})

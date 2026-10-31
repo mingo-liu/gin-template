@@ -31,6 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	recoverID := flag.String("recover", "", "recover target ID (operators must first verify log continuity)")
 	recoverType := flag.Int("type", 1, "target type for recovery")
@@ -58,8 +59,8 @@ func run() error {
 	}
 	client := rdb.NewClient(&rdb.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword, MaxRetries: -1, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second})
 	defer client.Close()
-	cache := &redis.Store{Client: client, MaxBacklog: cfg.MaxBacklog}
-	store := &mysql.Store{DB: db}
+	cache := &redis.Redis{Client: client, MaxBacklog: cfg.MaxBacklog}
+	store := &mysql.MySQL{DB: db}
 	identity, err := cache.Identity(startup)
 	if err != nil {
 		return err

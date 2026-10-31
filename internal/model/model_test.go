@@ -12,6 +12,7 @@ func TestDecimal(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
 func TestEvent(t *testing.T) {
 	e := Event{SchemaVersion: 1, EventID: "1:2001:g7:123-0", Generation: "g7", StreamID: "123-0", UserID: "18446744073709551615", TargetID: "2001", TargetType: 1, Action: "LIKE", Version: "3"}
 	if err := e.Validate(); err != nil {

@@ -41,8 +41,8 @@ func TestRelayRetentionAndRecoveryIntegration(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	client := rdb.NewClient(&rdb.Options{Addr: addr})
 	t.Cleanup(func() { client.Close() })
-	cache := &redis.Store{Client: client, MaxBacklog: 100}
-	store := &mysql.Store{DB: db}
+	cache := &redis.Redis{Client: client, MaxBacklog: 100}
+	store := &mysql.MySQL{DB: db}
 	identity, err := cache.Identity(ctx)
 	if err != nil {
 		t.Fatal(err)

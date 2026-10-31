@@ -28,6 +28,7 @@ func Load() (Config, error) {
 	}
 	return c, nil
 }
+
 func env(k, fallback string) string {
 	if v := os.Getenv(k); v != "" {
 		return v

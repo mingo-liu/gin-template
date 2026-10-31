@@ -25,7 +25,7 @@ func TestApplyIntegration(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(8)
-	store := &Store{DB: db}
+	store := &MySQL{DB: db}
 	ctx := context.Background()
 	id := strconv.FormatInt(time.Now().UnixNano(), 10)
 	target := model.Target{Type: 1, ID: id}

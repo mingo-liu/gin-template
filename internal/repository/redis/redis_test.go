@@ -14,7 +14,7 @@ import (
 	"likeflow/internal/model"
 )
 
-func testStore(t *testing.T) (*Store, model.Target) {
+func testRedis(t *testing.T) (*Redis, model.Target) {
 	t.Helper()
 	binary, err := exec.LookPath("redis-server")
 	if err != nil {
@@ -40,7 +40,7 @@ func testStore(t *testing.T) (*Store, model.Target) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	store := &Store{Client: client, MaxBacklog: 1000}
+	store := &Redis{Client: client, MaxBacklog: 1000}
 	id, err := store.Identity(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func testStore(t *testing.T) (*Store, model.Target) {
 }
 
 func TestConcurrentIdempotency(t *testing.T) {
-	store, target := testStore(t)
+	store, target := testRedis(t)
 	ctx := context.Background()
 	var wg sync.WaitGroup
 	for range 50 {
@@ -90,7 +90,7 @@ func TestConcurrentIdempotency(t *testing.T) {
 }
 
 func TestCorruptionAndBackpressure(t *testing.T) {
-	store, target := testStore(t)
+	store, target := testRedis(t)
 	ctx := context.Background()
 	k := Keys(target)
 	store.Client.Set(ctx, k[1], "01", 0)
@@ -115,7 +115,7 @@ func TestCorruptionAndBackpressure(t *testing.T) {
 }
 
 func TestPartialWriteLeavesRecoveryFence(t *testing.T) {
-	store, target := testStore(t)
+	store, target := testRedis(t)
 	ctx := context.Background()
 	k := Keys(target)
 	// Deny SET only: XADD and SADD succeed, then the script fails before the version write.
@@ -125,7 +125,7 @@ func TestPartialWriteLeavesRecoveryFence(t *testing.T) {
 	}
 	restricted := rdb.NewClient(&rdb.Options{Addr: store.Client.Options().Addr, Username: "partial", Password: "test-secret"})
 	defer restricted.Close()
-	broken := &Store{Client: restricted, MaxBacklog: 100}
+	broken := &Redis{Client: restricted, MaxBacklog: 100}
 	if _, err = broken.State(ctx, target, "1001", "LIKE"); err == nil {
 		t.Fatal("expected injected SET failure")
 	}
@@ -141,7 +141,7 @@ func TestPartialWriteLeavesRecoveryFence(t *testing.T) {
 }
 
 func TestVersionLimitAndServerFence(t *testing.T) {
-	store, target := testStore(t)
+	store, target := testRedis(t)
 	ctx := context.Background()
 	k := Keys(target)
 	store.Client.HSet(ctx, k[2], "1001", strconv.FormatUint(model.MaxNumber, 10))

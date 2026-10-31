@@ -8,8 +8,8 @@ import (
 )
 
 type Service struct {
-	DB    *mysql.Store
-	Redis *redis.Store
+	DB    *mysql.MySQL
+	Redis *redis.Redis
 }
 
 func (s *Service) Target(ctx context.Context, typ int, id string) (model.Target, error) {
@@ -24,6 +24,7 @@ func (s *Service) Target(ctx context.Context, typ int, id string) (model.Target,
 	}
 	return model.Target{}, model.ErrNotFound
 }
+
 func (s *Service) State(ctx context.Context, typ int, id, user, action string) (model.State, error) {
 	t, err := s.Target(ctx, typ, id)
 	if err != nil {

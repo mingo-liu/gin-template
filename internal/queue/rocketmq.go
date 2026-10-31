@@ -67,6 +67,7 @@ func (q *Queue) Start() error {
 	}
 	return nil
 }
+
 func (q *Queue) Close() {
 	if err := q.Consumer.Shutdown(); err != nil {
 		slog.Error("consumer shutdown", "error", err)
