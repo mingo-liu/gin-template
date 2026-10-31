@@ -58,6 +58,9 @@ func (r *Repository) Apply(ctx context.Context, e model.Event) (err error) {
 	if err != nil {
 		return err
 	}
+	if version > model.MaxNumber || (liked && version == 0) {
+		return fmt.Errorf("invalid stored relation version")
+	}
 	next, _ := strconv.ParseUint(e.Version, 10, 64)
 	newLiked := e.Action == "LIKE"
 	if next < version {
@@ -120,6 +123,10 @@ func (r *Repository) Snapshot(ctx context.Context, t model.Target) ([]model.Rela
 		if err = rows.Scan(&v.UserID, &v.Liked, &v.Version); err != nil {
 			rows.Close()
 			return nil, 0, err
+		}
+		if v.Version > model.MaxNumber || (v.Liked && v.Version == 0) {
+			rows.Close()
+			return nil, 0, fmt.Errorf("invalid snapshot relation")
 		}
 		result = append(result, v)
 		if v.Liked {

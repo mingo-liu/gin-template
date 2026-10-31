@@ -105,6 +105,15 @@ func (w *Worker) send(ctx context.Context, t model.Target, m rdb.XMessage) error
 
 func (w *Worker) process(ctx context.Context, t model.Target) error {
 	k := redisrepo.Keys(t)
+	identity, err := w.Redis.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	if identity != t.RedisRunID {
+		if err := w.Redis.Client.HSet(ctx, k[4], "state", "RECOVERING").Err(); err != nil {
+			return err
+		}
+	}
 	locked, err := w.Redis.Client.HExists(ctx, k[4], "recovery_token").Result()
 	if err != nil {
 		return err

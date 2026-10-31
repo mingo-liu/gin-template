@@ -34,4 +34,8 @@ INSERT IGNORE INTO targets (target_type,target_id,title,summary,category) VALUES
  (1,2001,'把复杂留给系统，把简单留给用户','一次点赞背后，是状态、事件与数据之间的默契协作。探索一个可靠交互是如何诞生的。','工程实践'),
  (1,2002,'慢下来，发现日常里的设计','好的设计往往藏在细节中：恰到好处的留白、自然的反馈，以及每一次被认真对待的点击。','设计观察'),
  (1,2003,'从一条消息开始，理解最终一致性','当数据穿过缓存、消息队列和数据库，如何让重复与乱序成为可以从容应对的日常。','架构笔记');
-INSERT IGNORE INTO like_count (target_type,target_id) SELECT target_type,target_id FROM targets WHERE initialized=FALSE;
+INSERT IGNORE INTO like_count (target_type,target_id,like_count)
+SELECT t.target_type,t.target_id,COUNT(u.id)
+FROM targets t LEFT JOIN user_like u
+ON u.target_type=t.target_type AND u.target_id=t.target_id AND u.liked=1
+WHERE t.initialized=FALSE GROUP BY t.target_type,t.target_id;

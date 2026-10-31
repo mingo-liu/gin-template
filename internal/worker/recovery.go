@@ -99,6 +99,14 @@ func (w *Worker) Recover(ctx context.Context, t model.Target, resume string) err
 	}
 	publish := rdb.NewScript(`
  if redis.call('HGET',KEYS[5],'recovery_token')~=ARGV[1] then return redis.error_reply('stale recovery') end
+ local actual=string.match(redis.call('INFO','server'),'run_id:([^\r\n]+)')
+ if actual~=ARGV[5] then return redis.error_reply('server changed during recovery') end
+ local expected={'set','string','hash','stream','hash','set','string','hash'}
+ for i=1,8 do
+  local kind=redis.call('TYPE',KEYS[i]).ok
+  if kind~=expected[i] and kind~='none' then return redis.error_reply('snapshot key type mismatch') end
+ end
+ if redis.call('TYPE',KEYS[4]).ok~='stream' then return redis.error_reply('log disappeared') end
  local card=redis.call('SCARD',KEYS[6]);local size=redis.call('HLEN',KEYS[8])
  if tostring(card)~=ARGV[2] or tostring(size)~=ARGV[3] then return redis.error_reply('incomplete snapshot') end
  redis.call('SET',KEYS[7],ARGV[2])

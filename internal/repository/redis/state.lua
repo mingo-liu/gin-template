@@ -1,4 +1,11 @@
 local max = 9007199254740991
+local function id(v)
+ return v and string.match(v,'^[1-9]%d*$') and (#v<20 or (#v==20 and v<='18446744073709551615'))
+end
+if not id(ARGV[1]) or not id(ARGV[3]) or (ARGV[2]~='1' and ARGV[2]~='2' and ARGV[2]~='3') then return redis.error_reply('invalid identity') end
+-- Check the actual server inside the atomic script, closing reconnect/failover races.
+local actual=string.match(redis.call('INFO','server'),'run_id:([^\r\n]+)')
+if actual~=ARGV[5] then return redis.error_reply('UNAVAILABLE server changed') end
 local function integer(v)
  if not v or not string.match(v, '^%d+$') or (#v > 1 and string.sub(v,1,1)=='0') then return nil end
  local n=tonumber(v)

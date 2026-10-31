@@ -110,7 +110,11 @@ func RateLimit() gin.HandlerFunc {
 			key   string
 			limit int
 		}{{"u:" + user, 30}, {"t:" + target, 200}} {
-			b := buckets[item.key]
+			b, exists := buckets[item.key]
+			if !exists && len(buckets) >= 10000 {
+				allowed = false
+				continue
+			}
 			if b.second != now {
 				b = bucket{second: now}
 			}
