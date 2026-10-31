@@ -1,3 +1,6 @@
+-- Declare the connection charset before importing UTF-8 seed data.
+SET NAMES utf8mb4;
+
 CREATE TABLE IF NOT EXISTS targets (
  target_type TINYINT UNSIGNED NOT NULL,
  target_id BIGINT UNSIGNED NOT NULL,

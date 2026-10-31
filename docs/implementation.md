@@ -20,7 +20,15 @@ make run
 
 访问 http://localhost:8080 。页面支持三位演示用户、点赞/取消、刷新、操作记录和 MySQL 同步进度。只有 `DEMO_MODE=true` 才开放演示登录；这是公开测试身份入口，部署到实际业务前关闭并接入登录服务。API 从 HttpOnly、SameSite=Strict 的签名 Cookie 或 Bearer Token 获取用户身份，不能通过 Body/用户 ID 请求头冒充用户。Token 格式及签发逻辑见 `internal/middleware`；密钥更换会使现有会话失效。
 
-Go 程序读取环境变量，不自动读取 `.env`。Compose 首次初始化数据卷时应用 `migrations/001_likes.sql`；已有数据库需要手工执行迁移。三篇演示文章都是公开可访问对象，类型 1/2/3 均受 API 和事件校验支持，新增对象时必须同时创建目录及准确的计数行。已有关系的对象不能按新对象初始化。
+Go 程序读取环境变量，不自动读取 `.env`。Compose 首次初始化数据卷时按文件名顺序执行 `migrations/*.sql`；已有数据库需要手工执行新增迁移。SQL 显式设置连接字符集为 utf8mb4，避免客户端默认 latin1 导致中文乱码。已有乱码可执行 `002_repair_demo_encoding.sql`，该迁移只修复与已知错误编码匹配的演示文字，可重复执行，不修改点赞状态或自定义内容。
+
+```sh
+docker compose -f deploy/docker-compose.yml exec -T mysql \
+  sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"' \
+  < migrations/002_repair_demo_encoding.sql
+```
+
+三篇演示文章都是公开可访问对象，类型 1/2/3 均受 API 和事件校验支持，新增对象时必须同时创建目录及准确的计数行。已有关系的对象不能按新对象初始化。
 
 默认镜像是 MySQL 8.4、Redis 7.4、RocketMQ 5.3.2。可通过 `MYSQL_IMAGE`、`REDIS_IMAGE`、`MQ_IMAGE`、`MQ_PLATFORM` 覆盖；例如 Apple Silicon 原生镜像可指定 `MQ_PLATFORM=linux/arm64`。默认 Broker 地址供宿主机 Go 程序使用；容器内运行 Go 服务须调整 `brokerIP1` 为所有客户端均可达的地址。Compose 数据卷持久化，端口仅绑定本机；Broker 在本地开发编排内以 root 运行，避免卷目录权限导致启动失败。
 
