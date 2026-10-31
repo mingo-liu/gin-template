@@ -52,4 +52,6 @@ gin-template/
 
 后端按 `routes → handler → service → repository` 划分职责：路由层注册接口，处理层解析请求并组织响应，服务层处理业务逻辑，数据访问层负责持久化和缓存。`model` 用于定义数据模型，`middleware` 用于放置通用请求处理逻辑。
 
+点赞系统方案见 [点赞系统设计方案](docs/like-system-design.md)。
+
 空目录通过 `.gitkeep` 占位，确保 Git 克隆后保留目录结构。添加实际文件后，可以移除对应的 `.gitkeep`。
