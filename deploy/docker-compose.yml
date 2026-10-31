@@ -1,0 +1,49 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: local-root-only
+      MYSQL_DATABASE: likeflow
+      MYSQL_USER: likeflow
+      MYSQL_PASSWORD: likeflow
+    ports: ["127.0.0.1:3306:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  namesrv:
+    image: apache/rocketmq:5.3.2
+    platform: linux/amd64
+    command: sh mqnamesrv
+    environment:
+      JAVA_OPT_EXT: -Xms128m -Xmx128m -Xmn64m
+    ports: ["127.0.0.1:9876:9876"]
+  broker:
+    image: apache/rocketmq:5.3.2
+    platform: linux/amd64
+    command: sh mqbroker -n namesrv:9876 -c /home/rocketmq/rocketmq-5.3.2/conf/likeflow.conf
+    environment:
+      JAVA_OPT_EXT: -Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m
+    ports: ["127.0.0.1:10909:10909", "127.0.0.1:10911:10911", "127.0.0.1:10912:10912"]
+    volumes:
+      - ./broker.conf:/home/rocketmq/rocketmq-5.3.2/conf/likeflow.conf:ro
+      - mq-data:/home/rocketmq/store
+    depends_on: [namesrv]
+volumes:
+  mysql-data:
+  redis-data:
+  mq-data:
